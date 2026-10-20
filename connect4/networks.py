@@ -17,7 +17,6 @@ def legal_mask(x):
     """A column is legal if its top cell is empty in both planes. Shape (batch, COLS)."""
     return x[:, :, 0, :].sum(dim=1) == 0
 
-
 class PolicyValueNet(nn.Module):
     """Shared logic: subclasses define `body` and the two heads; this class masks the policy."""
 
