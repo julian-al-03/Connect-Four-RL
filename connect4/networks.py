@@ -89,6 +89,9 @@ class ResNet(PolicyValueNet):
         )
 
 
+NETWORKS = {"mlp": MLPNet, "cnn": ResNet}
+
+
 def alphazero_loss(logits, value, target_policy, target_value):
     """(z - v)^2 - pi^T log p, averaged over the batch.
 
@@ -121,3 +124,14 @@ class NetworkEvaluator:
         logits, value = self.model(x)
         priors = torch.softmax(logits, dim=-1)[0].cpu().numpy()
         return priors, value.item()
+
+
+class PolicyAgent:
+    """Plays the network's most likely move directly, without any search."""
+
+    def __init__(self, model, device="cpu"):
+        self.evaluate = NetworkEvaluator(model, device)
+
+    def __call__(self, state):
+        priors, _ = self.evaluate(state)
+        return int(priors.argmax())

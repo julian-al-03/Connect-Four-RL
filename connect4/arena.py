@@ -2,14 +2,33 @@
 
 Run `python -m connect4.arena` for a table of the baseline matchups.
 """
+import numpy as np
+
 from connect4.agents import GreedyAgent, RandomAgent, pure_mcts_agent
 from connect4.game import ConnectFour
 
 
-def play_game(first, second):
-    """Play one game. Returns +1 if `first` wins, -1 if `second` wins, 0 for a draw."""
+def random_opening(num_moves, rng):
+    """A random sequence of legal moves. At most 6 moves, because no game can end that early."""
+    if num_moves > 6:
+        raise ValueError("openings can have at most 6 moves")
+    state, opening = ConnectFour(), []
+    for _ in range(num_moves):
+        opening.append(int(rng.choice(np.flatnonzero(state.legal_moves()))))
+        state = state.play(opening[-1])
+    return opening
+
+
+def play_game(first, second, opening=()):
+    """Play one game from the given opening moves.
+
+    `first` plays the first player's pieces. Returns +1 if `first` wins, -1 if `second` wins,
+    0 for a draw.
+    """
     agents = {1: first, -1: second}
     state = ConnectFour()
+    for col in opening:
+        state = state.play(col)
     while not state.is_terminal():
         state = state.play(agents[state.player](state))
     # terminal_value() is from the view of the player to move; state.player converts it
@@ -17,13 +36,21 @@ def play_game(first, second):
     return int(state.terminal_value() * state.player)
 
 
-def play_match(agent_a, agent_b, n_games):
-    """Play n_games, alternating who moves first. Returns results from agent_a's view."""
+def play_match(agent_a, agent_b, n_games, opening_moves=0, seed=None):
+    """Play n_games, alternating who plays first. Returns results from agent_a's view.
+
+    With opening_moves > 0, every pair of games starts from a new random opening, played once
+    with each colour assignment. Deterministic agents need this: otherwise they would repeat
+    the same two games. The colour swap keeps a lopsided opening from favouring either agent.
+    """
+    rng = np.random.default_rng(seed)
     stats = {"wins": 0, "draws": 0, "losses": 0,
              "wins_as_first": 0, "wins_as_second": 0}
     for g in range(n_games):
         a_first = g % 2 == 0
-        result = play_game(agent_a, agent_b) if a_first else -play_game(agent_b, agent_a)
+        if a_first:
+            opening = random_opening(opening_moves, rng)
+        result = play_game(agent_a, agent_b, opening) if a_first else -play_game(agent_b, agent_a, opening)
         if result == 1:
             stats["wins"] += 1
             stats["wins_as_first" if a_first else "wins_as_second"] += 1
