@@ -1,9 +1,12 @@
 import numpy as np
+import pytest
 import torch
 
 from connect4.game import ConnectFour
 from connect4.mcts import MCTS, visit_counts
-from connect4.networks import MLPNet, NetworkEvaluator, alphazero_loss
+from connect4.networks import MLPNet, NetworkEvaluator, ResNet, alphazero_loss, count_parameters
+
+networks = pytest.mark.parametrize("make_net", [MLPNet, ResNet])
 
 
 def encode_batch(states):
@@ -17,23 +20,26 @@ def play_moves(moves):
     return state
 
 
-def test_output_shapes_and_ranges():
-    net = MLPNet()
+@networks
+def test_output_shapes_and_ranges(make_net):
+    net = make_net()
     x = encode_batch([ConnectFour(), play_moves([3, 3, 4])])
     logits, value = net(x)
     assert logits.shape == (2, 7) and value.shape == (2,)
     assert torch.all(value.abs() <= 1)
 
 
-def test_illegal_moves_get_zero_probability():
-    net = MLPNet()
+@networks
+def test_illegal_moves_get_zero_probability(make_net):
+    net = make_net()
     logits, _ = net(encode_batch([play_moves([0] * 6)]))  # column 0 is full
     probs = torch.softmax(logits, dim=-1)[0]
     assert probs[0] == 0
     assert torch.isclose(probs.sum(), torch.tensor(1.0))
 
 
-def test_can_overfit_small_batch():
+@networks
+def test_can_overfit_small_batch(make_net):
     # Standard sanity check: the network and loss must be able to memorise a few examples
     torch.manual_seed(0)
     rng = np.random.default_rng(0)
@@ -50,7 +56,7 @@ def test_can_overfit_small_batch():
     target_policy /= target_policy.sum(dim=-1, keepdim=True)
     target_value = torch.tensor(rng.choice([-1.0, 0.0, 1.0], size=16), dtype=torch.float32)
 
-    net = MLPNet()
+    net = make_net()
     optimizer = torch.optim.Adam(net.parameters(), lr=1e-3)
     for _ in range(500):
         logits, value = net(x)
@@ -64,13 +70,27 @@ def test_can_overfit_small_batch():
     assert value_loss.item() < 0.01
 
 
-def test_network_evaluator_output():
-    priors, value = NetworkEvaluator(MLPNet())(play_moves([0] * 6))
+@networks
+def test_network_evaluator_output(make_net):
+    priors, value = NetworkEvaluator(make_net())(play_moves([0] * 6))
     assert priors.shape == (7,) and priors[0] == 0
     assert np.isclose(priors.sum(), 1.0)
     assert isinstance(value, float) and -1 <= value <= 1
 
 
-def test_mcts_runs_with_network():
-    root = MCTS(NetworkEvaluator(MLPNet()), num_simulations=50).search(ConnectFour(), add_noise=True)
+@networks
+def test_mcts_runs_with_network(make_net):
+    root = MCTS(NetworkEvaluator(make_net()), num_simulations=50).search(ConnectFour(), add_noise=True)
     assert visit_counts(root).sum() == 49
+
+
+def test_networks_have_similar_size():
+    mlp, cnn = count_parameters(MLPNet()), count_parameters(ResNet())
+    assert abs(mlp - cnn) / mlp < 0.05
+
+
+def test_evaluator_does_not_update_batchnorm_statistics():
+    net = ResNet()
+    before = {k: v.clone() for k, v in net.state_dict().items()}
+    NetworkEvaluator(net)(ConnectFour())
+    assert all(torch.equal(before[k], v) for k, v in net.state_dict().items())

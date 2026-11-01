@@ -43,6 +43,52 @@ class MLPNet(PolicyValueNet):
         self.value_head = nn.Sequential(nn.Linear(hidden, 64), nn.ReLU(), nn.Linear(64, 1))
 
 
+class ResidualBlock(nn.Module):
+    """Conv - BatchNorm - ReLU - Conv - BatchNorm, plus a skip connection, then ReLU."""
+
+    def __init__(self, channels):
+        super().__init__()
+        self.layers = nn.Sequential(
+            nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=False),
+            nn.BatchNorm2d(channels),
+            nn.ReLU(),
+            nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=False),
+            nn.BatchNorm2d(channels),
+        )
+
+    def forward(self, x):
+        return F.relu(x + self.layers(x))
+
+
+class ResNet(PolicyValueNet):
+    """Residual CNN in the style of AlphaZero. The defaults roughly match MLPNet's parameter count."""
+
+    def __init__(self, channels=48, num_blocks=4):
+        super().__init__()
+        self.body = nn.Sequential(
+            nn.Conv2d(2, channels, kernel_size=3, padding=1, bias=False),
+            nn.BatchNorm2d(channels),
+            nn.ReLU(),
+            *[ResidualBlock(channels) for _ in range(num_blocks)],
+        )
+        self.policy_head = nn.Sequential(
+            nn.Conv2d(channels, 2, kernel_size=1, bias=False),
+            nn.BatchNorm2d(2),
+            nn.ReLU(),
+            nn.Flatten(),
+            nn.Linear(2 * ROWS * COLS, COLS),
+        )
+        self.value_head = nn.Sequential(
+            nn.Conv2d(channels, 1, kernel_size=1, bias=False),
+            nn.BatchNorm2d(1),
+            nn.ReLU(),
+            nn.Flatten(),
+            nn.Linear(ROWS * COLS, 64),
+            nn.ReLU(),
+            nn.Linear(64, 1),
+        )
+
+
 def alphazero_loss(logits, value, target_policy, target_value):
     """(z - v)^2 - pi^T log p, averaged over the batch.
 

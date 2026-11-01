@@ -16,10 +16,10 @@ import torch
 from connect4.agents import GreedyAgent, pure_mcts_agent
 from connect4.arena import play_match
 from connect4.mcts import MCTS, MCTSAgent
-from connect4.networks import MLPNet, NetworkEvaluator, alphazero_loss
+from connect4.networks import MLPNet, NetworkEvaluator, ResNet, alphazero_loss
 from connect4.selfplay import mirror, self_play_game
 
-NETWORKS = {"mlp": MLPNet}
+NETWORKS = {"mlp": MLPNet, "cnn": ResNet}
 LOG_FIELDS = ["iteration", "buffer_size", "policy_loss", "value_loss", "selfplay_time",
               "score_vs_greedy", "score_vs_pure_mcts", "time"]
 
