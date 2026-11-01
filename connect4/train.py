@@ -60,12 +60,21 @@ def train_step(model, optimizer, buffer, batch_size, rng):
     return policy_loss.item(), value_loss.item()
 
 
+def export_weights(model):
+    """Model weights as NumPy arrays, which are sent to workers by value.
+
+    Tensors would be shared through one file descriptor each on Linux, and with dozens of
+    tensors per game that exceeds the limit on open files.
+    """
+    return {name: tensor.numpy() for name, tensor in model.state_dict().items()}
+
+
 def self_play_worker(task):
     """Worker: play one game on its own copy of the network. The game's seed fixes all its randomness."""
-    args, state_dict, seed = task
+    args, weights, seed = task
     rng = np.random.default_rng(seed)
     model = NETWORKS[args.net]()
-    model.load_state_dict(state_dict)
+    model.load_state_dict({name: torch.from_numpy(w) for name, w in weights.items()})
     mcts = MCTS(NetworkEvaluator(model), args.simulations, args.c_puct,
                 dirichlet_alpha=args.dirichlet_alpha, seed=rng.integers(2**32))
     return self_play_game(mcts, rng, args.temperature_moves)
@@ -99,7 +108,8 @@ def train(args):
             start = time.time()
 
             # 1. Self-play with the current network, one independently seeded game per task
-            tasks = [(args, model.state_dict(), seed) for seed in rng.integers(2**32, size=args.games_per_iteration)]
+            weights = export_weights(model)
+            tasks = [(args, weights, seed) for seed in rng.integers(2**32, size=args.games_per_iteration)]
             for samples in pool.map(self_play_worker, tasks, chunksize=1):
                 buffer.extend(samples)
                 buffer.extend(mirror(sample) for sample in samples)

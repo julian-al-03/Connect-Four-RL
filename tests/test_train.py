@@ -1,8 +1,10 @@
 import csv
 
+import numpy as np
 import pytest
 
-from connect4.train import parse_args, train
+from connect4.networks import NETWORKS
+from connect4.train import export_weights, parse_args, self_play_worker, train
 
 
 @pytest.mark.parametrize("net", ["mlp", "cnn"])
@@ -27,3 +29,12 @@ def test_results_do_not_depend_on_worker_count(tmp_path):
     one, three = run(1), run(3)
     for key in ["buffer_size", "policy_loss", "value_loss", "score_vs_greedy", "score_vs_pure_mcts"]:
         assert one[0][key] == three[0][key]
+
+
+@pytest.mark.parametrize("net", ["mlp", "cnn"])
+def test_workers_receive_plain_arrays_and_can_play(net):
+    weights = export_weights(NETWORKS[net]())
+    assert all(type(w) is np.ndarray for w in weights.values())  # no tensors: see export_weights
+    args = parse_args(["--net", net, "--simulations", "5"])
+    samples = self_play_worker((args, weights, 0))
+    assert len(samples) >= 7
