@@ -57,17 +57,16 @@ class ConnectFour:
 
         Only lines through the last move can be new wins, so we never scan the whole board.
         """
-        piece = self.board[row, col]
-        for dr, dc in DIRECTIONS:
-            count = 1
-            for sign in (1, -1):
-                r, c = row + sign * dr, col + sign * dc
-                while 0 <= r < ROWS and 0 <= c < COLS and self.board[r, c] == piece:
-                    count += 1
-                    r, c = r + sign * dr, c + sign * dc
-            if count >= 4:
-                return True
-        return False
+        return any(self._same_pieces(row, col, dr, dc) + self._same_pieces(row, col, -dr, -dc) >= 3
+                   for dr, dc in DIRECTIONS)
+
+    def _same_pieces(self, row, col, dr, dc):
+        """How many of the next 3 cells from (row, col) along (dr, dc) continue its line of pieces."""
+        for step in range(1, 4):
+            r, c = row + step * dr, col + step * dc
+            if not (0 <= r < ROWS and 0 <= c < COLS) or self.board[r, c] != self.board[row, col]:
+                return step - 1
+        return 3
 
     def is_terminal(self):
         return self.last_move_won or self.num_moves == ROWS * COLS
