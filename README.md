@@ -118,10 +118,30 @@ python -m connect4.evaluate --agents $AGENTS --opponents pure:100 pure:400 --gam
   --simulations 100 --workers 40 --out runs/sweep/final_temperature.csv
 ```
 
-### 6. Figures
+### 6. `c_puct` sweep (MLP)
+
+The main MLP runs provide the reference at `--c-puct 1.5`. The final evaluation uses
+`c_puct` 1.5 for all agents, whatever value the network was trained with.
+
+```bash
+for c in 0.5 4; do for seed in 0 1 2; do
+  python -m connect4.train --net mlp --iterations 100 --games-per-iteration 100 --simulations 100 \
+    --c-puct $c --train-steps 400 --buffer-size 100000 --eval-every 10 --eval-games 40 \
+    --seed $seed --workers 6 --train-threads 2 --out runs/sweep/mlp_cpuct${c}_seed$seed \
+    > runs/sweep/mlp_cpuct${c}_seed$seed.log 2>&1 &
+done; done; wait
+
+AGENTS=$(for f in runs/sweep/mlp_cpuct*/model_100.pt; do echo "mlp:$f"; done)
+python -m connect4.evaluate --agents $AGENTS --opponents pure:100 pure:400 --games 200 \
+  --simulations 100 --workers 40 --out runs/sweep/final_cpuct.csv
+```
+
+### 7. Figures
 
 ```bash
 python -m connect4.plot "mlp=runs/main/mlp_seed*" "cnn=runs/main/cnn_seed*" --out figures/main
 python -m connect4.plot "temp 0=runs/sweep/mlp_temp0_seed?" "temp 5=runs/sweep/mlp_temp5_seed?" \
   "temp 10=runs/main/mlp_seed?" "temp 20=runs/sweep/mlp_temp20_seed?" --out figures/temperature
+python -m connect4.plot "c_puct 0.5=runs/sweep/mlp_cpuct0.5_seed?" "c_puct 1.5=runs/main/mlp_seed?" \
+  "c_puct 4=runs/sweep/mlp_cpuct4_seed?" --out figures/cpuct
 ```
