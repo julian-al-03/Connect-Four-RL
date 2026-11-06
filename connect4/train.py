@@ -33,6 +33,8 @@ def parse_args(argv=None):
     p.add_argument("--dirichlet-alpha", type=float, default=1.0)
     p.add_argument("--temperature-moves", type=int, default=10)
     p.add_argument("--buffer-size", type=int, default=50_000, help="max samples kept (sliding window)")
+    p.add_argument("--fresh-buffer", action="store_true",
+                   help="empty the buffer before each self-play phase, so training only uses the newest games")
     p.add_argument("--train-steps", type=int, default=200, help="gradient steps per iteration")
     p.add_argument("--batch-size", type=int, default=128)
     p.add_argument("--lr", type=float, default=1e-3)
@@ -108,6 +110,8 @@ def train(args):
             start = time.time()
 
             # 1. Self-play with the current network, one independently seeded game per task
+            if args.fresh_buffer:
+                buffer.clear()
             weights = export_weights(model)
             tasks = [(args, weights, seed) for seed in rng.integers(2**32, size=args.games_per_iteration)]
             for samples in pool.map(self_play_worker, tasks, chunksize=1):

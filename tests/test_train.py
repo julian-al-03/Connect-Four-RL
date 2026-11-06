@@ -38,3 +38,16 @@ def test_workers_receive_plain_arrays_and_can_play(net):
     args = parse_args(["--net", net, "--simulations", "5"])
     samples = self_play_worker((args, weights, 0))
     assert len(samples) >= 7
+
+
+def test_fresh_buffer_keeps_only_the_newest_games(tmp_path):
+    def run(*extra):
+        args = parse_args(["--iterations", "2", "--games-per-iteration", "3", "--simulations", "5",
+                           "--train-steps", "2", "--batch-size", "8", "--eval-every", "5",
+                           "--out", str(tmp_path / str(len(extra))), *extra])
+        return train(args)[1]
+
+    sliding, fresh = run(), run("--fresh-buffer")
+    # Same seeds, so both runs play the same games; the fresh buffer drops iteration 1's samples
+    assert fresh[0]["buffer_size"] == sliding[0]["buffer_size"]
+    assert fresh[1]["buffer_size"] == sliding[1]["buffer_size"] - sliding[0]["buffer_size"]
